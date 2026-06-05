@@ -1,0 +1,4 @@
+name: DynamicLighting
+version: '1.0'
+main: lopiktwo.github.dynamicLighting.DynamicLighting
+api-version: '1.21'
