@@ -5,3 +5,7 @@ api-version: '1.21'
 commands:
   dl:
     description: main command for plugin
+permissions:
+  dynamiclighting:
+    description: Full access
+    default: op

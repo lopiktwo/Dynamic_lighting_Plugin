@@ -42,7 +42,10 @@ public final class DynamicLighting extends JavaPlugin {
             sendHelpMenu(sender, label);
             return true;
         }
-
+        if (!sender.hasPermission("dynamiclighting.admin")) {
+            sender.sendMessage("§cYou do not have permission!");
+            return true;
+        }
         String subCommand = args[0].toLowerCase();
 
         switch (subCommand) {
@@ -74,10 +77,7 @@ public final class DynamicLighting extends JavaPlugin {
                 break;
 
             case "reload":
-                if (!sender.hasPermission("dynamiclighting.admin")) {
-                    sender.sendMessage("§cYou do not have permission!");
-                    return true;
-                }
+
                 reloadConfig();
 
                 sender.sendMessage("§e[DynamicLighting] Configuration reloaded!");
