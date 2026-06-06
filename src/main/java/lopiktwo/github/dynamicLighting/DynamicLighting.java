@@ -30,7 +30,7 @@ public final class DynamicLighting extends JavaPlugin {
     public void onDisable() {
         if (handler != null) {
             getServer().getOnlinePlayers().forEach(player -> {
-                handler.lvl_light = 0;
+
             });
         }
         logger.info("DynamicLighting off");
@@ -79,7 +79,7 @@ public final class DynamicLighting extends JavaPlugin {
                     return true;
                 }
                 reloadConfig();
-                handler.lvl_light = getConfig().getInt("light-level", 15);
+
                 sender.sendMessage("§e[DynamicLighting] Configuration reloaded!");
                 break;
 
