@@ -3,30 +3,30 @@ package lopiktwo.github.dynamicLighting;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
+import org.bukkit.block.BlockState;
 import org.bukkit.block.data.Levelled;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryClickEvent;
-import org.bukkit.event.player.PlayerItemHeldEvent;
-import org.bukkit.event.player.PlayerMoveEvent;
-import org.bukkit.event.player.PlayerQuitEvent;
-import org.bukkit.event.player.PlayerSwapHandItemsEvent;
+import org.bukkit.event.player.*;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.util.HashMap;
 import java.util.UUID;
 
+import static org.bukkit.Material.LANTERN;
+
 public class MainHandler implements Listener {
 
     private final JavaPlugin plugin;
-    // Использование UUID вместо объекта Player предотвращает утечки памяти
-    private final HashMap<UUID, Block> activeLights = new HashMap<>();
+    private final HashMap<UUID, BlockState> activeLights = new HashMap<>();
+    public int lvl_light;
 
-    // Конструктор для доступа к вашему главному классу (нужен для шедулера)
     public MainHandler(JavaPlugin plugin) {
         this.plugin = plugin;
+
     }
 
     @EventHandler
@@ -34,9 +34,7 @@ public class MainHandler implements Listener {
         Player player = event.getPlayer();
         ItemStack newItem = player.getInventory().getItem(event.getNewSlot());
 
-        // Проверяем, будет ли в руке факел после завершения этого события
-        boolean holdingTorch = isTorch(newItem) || isTorch(player.getInventory().getItemInOffHand());
-
+        boolean holdingTorch = isLightAble(newItem) || isLightAble(player.getInventory().getItemInOffHand());
         updateLightPresence(player, holdingTorch);
     }
 
@@ -45,36 +43,34 @@ public class MainHandler implements Listener {
         Location from = event.getFrom();
         Location to = event.getTo();
 
-        // Срабатывает только если игрок действительно перешагнул в новый блок
-        if (from.getBlockX() == to.getBlockX() && from.getBlockY() == to.getBlockY() && from.getBlockZ() == to.getBlockZ()) {
+        if ((from.getBlockX() == to.getBlockX() && from.getBlockY() == to.getBlockY() && from.getBlockZ() == to.getBlockZ())) {
             return;
         }
 
         Player player = event.getPlayer();
-        if (!activeLights.containsKey(player.getUniqueId())) return;
+        boolean holdingTorch = isHoldingTorch(player);
 
-        // Дополнительно проверяем, держит ли он всё ещё факел при движении
-        if (isHoldingTorch(player)) {
-            removeLight(player);
-            createLight(player, to.getBlock());
+        if (holdingTorch) {
+            Block targetBlock = to.getBlock();
+            BlockState currentLightState = activeLights.get(player.getUniqueId());
+
+            if (currentLightState == null || !currentLightState.getBlock().equals(targetBlock)) {
+                removeLight(player);
+                createLight(player, targetBlock);
+            }
         } else {
             removeLight(player);
         }
     }
 
-    // --- Дополнительные события для отлова всех ситуаций ---
-
     @EventHandler
     public void onHandSwap(PlayerSwapHandItemsEvent event) {
-        // Срабатывает при нажатии клавиши 'F' (перекладывание в левую руку)
-        updateLightPresence(event.getPlayer(), isTorch(event.getMainHandItem()) || isTorch(event.getOffHandItem()));
+        updateLightPresence(event.getPlayer(), isLightAble(event.getMainHandItem()) || isLightAble(event.getOffHandItem()));
     }
 
     @EventHandler
     public void onInventoryClick(InventoryClickEvent event) {
-        // Срабатывает, если игрок перекладывает факел мышкой внутри инвентаря
         if (event.getWhoClicked() instanceof Player player) {
-            // Выполняем проверку на 1 тик позже, чтобы инвентарь успел обновиться
             player.getServer().getScheduler().runTask(plugin, () -> {
                 updateLightPresence(player, isHoldingTorch(player));
             });
@@ -83,17 +79,20 @@ public class MainHandler implements Listener {
 
     @EventHandler
     public void onPlayerQuit(PlayerQuitEvent event) {
-        // Обязательно убираем свет и чистим мапу, когда игрок выходить с сервера
         removeLight(event.getPlayer());
     }
 
-
+    @EventHandler
+    public void onPlayerDrop(PlayerDropItemEvent event) {
+        removeLight(event.getPlayer());
+    }
 
     private void updateLightPresence(Player player, boolean shouldHaveLight) {
         if (shouldHaveLight) {
             Block currentBlock = player.getLocation().getBlock();
+            BlockState currentLightState = activeLights.get(player.getUniqueId());
 
-            if (!activeLights.containsKey(player.getUniqueId()) || !activeLights.get(player.getUniqueId()).equals(currentBlock)) {
+            if (currentLightState == null || !currentLightState.getBlock().equals(currentBlock)) {
                 removeLight(player);
                 createLight(player, currentBlock);
             }
@@ -103,30 +102,77 @@ public class MainHandler implements Listener {
     }
 
     private void createLight(Player player, Block block) {
+        if (!block.getType().isAir() || block.getType().isSolid()) return;
 
-        if (block.getType() != Material.AIR && block.getType() != Material.LIGHT) return;
+        activeLights.put(player.getUniqueId(), block.getState());
+
+        ItemStack mainHand = player.getInventory().getItemInMainHand();
+        ItemStack offHand = player.getInventory().getItemInOffHand();
+
+        if (isLightAble(mainHand)) {
+            lvl_light = howMuchLight(mainHand);
+        } else if (isLightAble(offHand)) {
+            lvl_light = howMuchLight(offHand);
+        } else {
+            return;
+        }
 
         block.setType(Material.LIGHT);
         if (block.getBlockData() instanceof Levelled levelled) {
-            levelled.setLevel(15);
+            levelled.setLevel(lvl_light);
             block.setBlockData(levelled);
         }
-        activeLights.put(player.getUniqueId(), block);
     }
 
     private void removeLight(Player player) {
-        Block oldBlock = activeLights.remove(player.getUniqueId());
+        BlockState originalState = activeLights.remove(player.getUniqueId());
 
-        if (oldBlock != null && oldBlock.getType() == Material.LIGHT) {
-            oldBlock.setType(Material.AIR);
+        if (originalState != null) {
+            originalState.update(true, false);
         }
     }
 
     private boolean isHoldingTorch(Player player) {
-        return isTorch(player.getInventory().getItemInMainHand()) || isTorch(player.getInventory().getItemInOffHand());
+        return isLightAble(player.getInventory().getItemInMainHand()) || isLightAble(player.getInventory().getItemInOffHand());
     }
 
-    private boolean isTorch(ItemStack item) {
-        return item != null && item.getType() == Material.TORCH;
+    private boolean isLightAble(ItemStack item) {
+        if (item == null) return false;
+        Material type = item.getType();
+        return type == Material.TORCH
+                || type == Material.SEA_LANTERN
+                || type == Material.LANTERN
+                || type == Material.SOUL_LANTERN
+                || type == Material.OCHRE_FROGLIGHT
+                || type == Material.VERDANT_FROGLIGHT
+                || type == Material.PEARLESCENT_FROGLIGHT;
+    }
+
+    private int howMuchLight(ItemStack itemStack) {
+        ItemStack item = itemStack;
+        Material material = item.getType();
+        switch (material) {
+            case TORCH:
+                return plugin.getConfig().getInt("TORCH", 15);
+            case LANTERN:
+                return plugin.getConfig().getInt("LANTERN", 15);
+            case SEA_LANTERN:
+                return plugin.getConfig().getInt("SEA_LANTERN", 15);
+            case SOUL_LANTERN:
+                return plugin.getConfig().getInt("SOUL_LANTERN", 15);
+            case OCHRE_FROGLIGHT:
+                return plugin.getConfig().getInt("OCHRE_FROGLIGHT", 15);
+            case VERDANT_FROGLIGHT:
+                return plugin.getConfig().getInt("VERDANT_FROGLIGHT", 15);
+            case PEARLESCENT_FROGLIGHT:
+                return plugin.getConfig().getInt("PEARLESCENT_FROGLIGHT", 15);
+
+            default:
+                return 0;
+        }
+    }
+
+    public void setLvl(int number) {
+        this.lvl_light = number;
     }
 }
