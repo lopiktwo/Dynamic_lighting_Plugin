@@ -11,14 +11,14 @@ public final class DynamicLighting extends JavaPlugin {
 
     private MainHandler handler;
     private final Logger logger = PaperPluginLogger.getLogger(this.getPluginMeta());
-    private boolean isLightEnabled = true;
+    private boolean isLightEnabled = getConfig().getBoolean("STATUS",false);
 
     @Override
     public void onEnable() {
         logger.info("started by lopiktwo");
         saveDefaultConfig();
 
-        handler = new MainHandler(this);
+        handler = new MainHandler(this,this);
         getServer().getPluginManager().registerEvents(handler, this);
 
         if (this.getCommand("dl") != null) {
@@ -33,6 +33,7 @@ public final class DynamicLighting extends JavaPlugin {
 
             });
         }
+
         logger.info("DynamicLighting off");
     }
 
@@ -55,6 +56,7 @@ public final class DynamicLighting extends JavaPlugin {
                     return true;
                 }
                 isLightEnabled = true;
+                getConfig().set("STATUS",true);
                 sender.sendMessage("§a[DynamicLighting] Light has been enabled!");
                 break;
 
@@ -64,6 +66,7 @@ public final class DynamicLighting extends JavaPlugin {
                     return true;
                 }
                 isLightEnabled = false;
+                getConfig().set("STATUS",false);
                 getServer().getOnlinePlayers().forEach(player -> {
                     try {
                         java.lang.reflect.Method removeLightMethod = handler.getClass().getDeclaredMethod("removeLight", org.bukkit.entity.Player.class);
@@ -104,5 +107,8 @@ public final class DynamicLighting extends JavaPlugin {
             sender.sendMessage("§e/" + label + " reload §7- Reload the plugin");
         }
         sender.sendMessage("§7§m=================================================");
+    }
+    public boolean getIsEnable(){
+      return  isLightEnabled;
     }
 }

@@ -19,14 +19,18 @@ import java.util.UUID;
 public class MainHandler implements Listener {
 
     private final JavaPlugin plugin;
+    private final DynamicLighting dynamicLighting;
     private final HashMap<UUID, BlockState> activeLights = new HashMap<>();
 
-    public MainHandler(JavaPlugin plugin) {
+    public MainHandler(JavaPlugin plugin,DynamicLighting o) {
         this.plugin = plugin;
+        this.dynamicLighting = o;
+
     }
 
     @EventHandler
     public void onItemHeld(PlayerItemHeldEvent event) {
+        if(!(dynamicLighting.getIsEnable())) return;
         Player player = event.getPlayer();
         plugin.getServer().getScheduler().runTask(plugin, () -> {
             updateLightPresence(player, isHoldingTorch(player));
@@ -35,6 +39,7 @@ public class MainHandler implements Listener {
 
     @EventHandler
     public void onPlayerMove(PlayerMoveEvent event) {
+        if(!(dynamicLighting.getIsEnable())) return;
         Location from = event.getFrom();
         Location to = event.getTo();
 
@@ -48,6 +53,7 @@ public class MainHandler implements Listener {
 
     @EventHandler
     public void onHandSwap(PlayerSwapHandItemsEvent event) {
+        if(!(dynamicLighting.getIsEnable())) return;
         Player player = event.getPlayer();
         plugin.getServer().getScheduler().runTask(plugin, () -> {
             updateLightPresence(player, isHoldingTorch(player));
@@ -56,6 +62,7 @@ public class MainHandler implements Listener {
 
     @EventHandler
     public void onInventoryClick(InventoryClickEvent event) {
+        if(!(dynamicLighting.getIsEnable())) return;
         if (event.getWhoClicked() instanceof Player player) {
             plugin.getServer().getScheduler().runTask(plugin, () -> {
                 updateLightPresence(player, isHoldingTorch(player));
@@ -65,11 +72,13 @@ public class MainHandler implements Listener {
 
     @EventHandler
     public void onPlayerQuit(PlayerQuitEvent event) {
+        if(!(dynamicLighting.getIsEnable())) return;
         removeLight(event.getPlayer());
     }
 
     @EventHandler
     public void onPlayerDrop(PlayerDropItemEvent event) {
+        if(!(dynamicLighting.getIsEnable())) return;
         Player player = event.getPlayer();
         plugin.getServer().getScheduler().runTask(plugin, () -> {
             updateLightPresence(player, isHoldingTorch(player));
@@ -81,21 +90,30 @@ public class MainHandler implements Listener {
         BlockState currentLightState = activeLights.get(player.getUniqueId());
 
         if (shouldHaveLight) {
+            int targetLightLevel = getLightLevel(player);
+
             if (currentLightState == null || !currentLightState.getBlock().equals(currentBlock)) {
                 removeLight(player);
-                createLight(player, currentBlock);
+                createLight(player, currentBlock, targetLightLevel);
+            } else {
+                Block block = currentLightState.getBlock();
+                if (block.getBlockData() instanceof Light lightData) {
+                    if (lightData.getLevel() != targetLightLevel) {
+                        removeLight(player);
+                        createLight(player, currentBlock, targetLightLevel);
+                    }
+                }
             }
         } else {
             removeLight(player);
         }
     }
 
-    private void createLight(Player player, Block block) {
+    private void createLight(Player player, Block block, int lightLevel) {
         if (!block.getType().isAir() && block.getType() != Material.CAVE_AIR && block.getType() != Material.VOID_AIR) {
             return;
         }
 
-        int lightLevel = getLightLevel(player);
         if (lightLevel <= 0) return;
 
         activeLights.put(player.getUniqueId(), block.getState());
@@ -127,7 +145,13 @@ public class MainHandler implements Listener {
                 || type == Material.SOUL_LANTERN
                 || type == Material.OCHRE_FROGLIGHT
                 || type == Material.VERDANT_FROGLIGHT
-                || type == Material.PEARLESCENT_FROGLIGHT;
+                || type == Material.PEARLESCENT_FROGLIGHT
+                || type == Material.GLOWSTONE
+                || type == Material.GLOW_LICHEN
+                || type == Material.REDSTONE_TORCH
+
+
+                ;
     }
 
     private int getLightLevel(Player player) {
@@ -144,9 +168,10 @@ public class MainHandler implements Listener {
 
     private int getConfigLightValue(Material material) {
         return switch (material) {
-            case TORCH, LANTERN, OCHRE_FROGLIGHT, VERDANT_FROGLIGHT, PEARLESCENT_FROGLIGHT -> plugin.getConfig().getInt(material.name(), 15);
-            case SEA_LANTERN, SOUL_LANTERN -> plugin.getConfig().getInt(material.name(), 7);
+            case TORCH, LANTERN, OCHRE_FROGLIGHT, VERDANT_FROGLIGHT, PEARLESCENT_FROGLIGHT, GLOWSTONE -> plugin.getConfig().getInt(material.name(), 15);
+            case SOUL_LANTERN -> plugin.getConfig().getInt(material.name(), 10);
+            case SEA_LANTERN -> plugin.getConfig().getInt(material.name(), 15);
+            case GLOW_LICHEN, REDSTONE_TORCH -> plugin.getConfig().getInt(material.name(), 7);
             default -> 0;
         };
-    }
-}
+}}
